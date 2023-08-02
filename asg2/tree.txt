@@ -1,0 +1,985 @@
+/**
+ * @file Tree.hpp
+ * @author Dennis Andersen - deand17
+ * @brief Generic binary tree.
+ * @date 2022-05-14
+ *
+ * DM852 Introduction to Generic Programming
+ *
+ * Assignment 2 - Spring 2022
+ *
+ * Implementation of generic binary tree.
+ *
+ * The tree is DefaultConstructible, Copyable, and EqualityComparable and should
+ * therefore be a Regular type. It is also MoveConstructible and Movable.
+ *
+ *
+ */
+#ifndef TREE_HPP
+#define TREE_HPP
+
+#include <concepts>
+#include <iostream>
+#include <memory>
+
+#include <queue>
+
+namespace DM852
+{
+template<typename Key, typename Value, typename Comp = std::less<Key>>
+requires std::strict_weak_order<std::less<Key>, Key const&, Key const&>
+         && std::default_initializable<Key>
+         && std::default_initializable<Value>
+struct Tree
+{
+private:
+    struct Tree_node
+    {
+        using value_type = std::pair<const Key, Value>;
+
+        Tree_node() = delete;
+
+        Tree_node(const Key k, Value v, Tree_node *sentinel)
+            : m_parent(sentinel), m_left(sentinel), m_right(sentinel),
+              m_data(std::move(k), std::move(v)) { }
+
+        Tree_node(value_type elem, Tree_node *sentinel)
+            : m_parent(sentinel), m_left(sentinel), m_right(sentinel),
+              m_data(std::move(elem)) { }
+
+        // copy ctor
+        Tree_node(const Tree_node &other)
+            : m_parent(other.m_parent),
+              m_left(other.m_left),
+              m_right(other.m_right),
+              m_data(other.m_data) { }
+
+        // move ctor
+        Tree_node(Tree_node &&other) noexcept
+            : m_parent(std::move(other.m_parent)),
+              m_left(std::move(other.m_left)),
+              m_right(std::move(other.m_right)),
+              m_data(std::move(other.m_data)) { }
+
+        ~Tree_node()
+        {
+            std::cout << "~Tree_node::dtor: " << m_data.first << ", " << m_data.second << '\n';
+        }
+
+        Tree_node &operator=(const Tree_node &other)
+        {
+            m_parent = other.m_parent;
+            m_left = other.m_left;
+            m_right = other.m_right;
+            m_data = other.m_data;
+            return *this;
+        }
+
+        Tree_node &operator=(Tree_node &&other)
+        {
+            m_parent = std::move(other.m_parent);
+            m_left = std::move(other.m_left);
+            m_right = std::move(other.m_right);
+            m_data = std::move(other.m_data);
+            return *this;
+        }
+
+        const Key key() const
+        {
+            return m_data.first;
+        }
+
+        const Value value() const
+        {
+            return m_data.second;
+        }
+
+        void set_value(Value v)
+        {
+            m_data.second = std::move(v);
+        }
+
+        Tree_node *m_parent;
+        Tree_node *m_left;
+        Tree_node *m_right;
+
+        value_type m_data;
+    };
+
+    using Node = Tree_node;
+
+public:
+    struct Tree_iterator;
+    struct Const_tree_iterator;
+
+    using iterator       = Tree_iterator;
+    using const_iterator = Const_tree_iterator;
+    using value_type     = std::pair<const Key, Value>;
+
+    struct Tree_iterator
+    {
+        friend struct Tree;
+
+        using Node              = Tree_node;
+
+        using difference_type   = std::ptrdiff_t;
+        using iterator_category = std::bidirectional_iterator_tag;
+        using value_type        = std::pair<const Key, Value>;
+        using pointer           = std::pair<const Key, Value>*;
+        using reference         = std::pair<const Key, Value>&;
+
+        Tree_iterator(Tree *t, Node *x)
+            : t(t), m_node(x) { }
+
+        // copy ctor
+        Tree_iterator(const Tree_iterator &other)
+            : t(other.t), m_node(other.m_node) { }
+
+        ~Tree_iterator() = default;
+
+        Tree_iterator &operator=(const iterator &other)
+        {
+            std::cout << "Tree_iterator::operator= copy assignment\n";
+            auto tmp = other;
+            f_swap(*this, tmp);
+            return *this;
+        }
+
+        reference operator*()
+        {
+            return m_node->m_data;
+        }
+
+        pointer operator->()
+        {
+            pointer p{m_node->m_data};
+            return p;
+        }
+
+        Tree_iterator& operator++()
+        {
+            m_node = t->next(m_node);
+            return *this;
+        }
+
+        Tree_iterator operator++(int)
+        {
+            Tree_iterator tmp = *this;
+            m_node = t->next(m_node);
+            return tmp;
+        }
+
+        Tree_iterator& operator--()
+        {
+            m_node = t->prev(m_node);
+            return *this;
+        }
+
+        Tree_iterator operator--(int)
+        {
+            Tree_iterator tmp = *this;
+            m_node = t->prev(m_node);
+            return tmp;
+        }
+
+        friend bool operator==(const Tree_iterator& x, const Tree_iterator& y)
+        {
+            return x.m_node == y.m_node;
+        };
+
+        friend bool operator!=(const Tree_iterator& x, const Tree_iterator& y)
+        {
+            return x.m_node != y.m_node;
+        };
+
+        friend void f_swap(Tree_iterator &lhs, Tree_iterator &rhs)
+        {
+            using std::swap;
+            swap(lhs.t, rhs.t);
+            swap(lhs.m_node, rhs.m_node);
+        }
+
+    private:
+        Tree *t;
+        Node *m_node;
+    };
+
+    struct Const_tree_iterator
+    {
+        friend struct Tree;
+
+        using Node              = Tree_node;
+
+        using difference_type   = std::ptrdiff_t;
+        using iterator_category = std::bidirectional_iterator_tag;
+        using value_type        = std::pair<const Key, Value>;
+        using pointer           = const std::pair<const Key, Value>*;
+        using reference         = const std::pair<const Key, Value>&;
+
+        Const_tree_iterator(const Tree *t, const Node *x)
+                : t(t), m_node(x) { }
+
+        Const_tree_iterator(const Tree *t, const iterator it)
+                : t(t), m_node(it.m_node) { }
+
+        ~Const_tree_iterator() = default;
+
+        Const_tree_iterator &operator=(const const_iterator &other)
+        {
+            std::cout << "Const_tree_iterator::operator= copy assignment\n";
+            auto tmp = other;
+            f_swap(*this, tmp);
+            return *this;
+        }
+
+        reference operator*() const
+        {
+            return m_node->m_data;
+        }
+
+        pointer operator->() const
+        {
+            pointer p{m_node->m_data};
+            return p;
+        }
+
+        Const_tree_iterator& operator++()
+        {
+            m_node = t->next(m_node);
+            return *this;
+        }
+
+        Const_tree_iterator operator++(int)
+        {
+            Const_tree_iterator tmp = *this;
+            m_node = t->next(m_node);
+            return tmp;
+        }
+
+        Const_tree_iterator& operator--()
+        {
+            m_node = t->prev(m_node);
+            return *this;
+        }
+
+        Const_tree_iterator operator--(int)
+        {
+            Const_tree_iterator tmp = *this;
+            m_node = t->prev(m_node);
+            return tmp;
+        }
+
+        friend bool operator==(const Const_tree_iterator& x, const Const_tree_iterator& y)
+        {
+            return x.m_node == y.m_node;
+        };
+
+        friend bool operator!=(const Const_tree_iterator& x, const Const_tree_iterator& y)
+        {
+            return x.m_node != y.m_node;
+        };
+
+        friend void f_swap(Const_tree_iterator &lhs, Const_tree_iterator &rhs)
+        {
+            using std::swap;
+            swap(lhs.t, rhs.t);
+            swap(lhs.m_node, rhs.m_node);
+        }
+
+    private:
+        const Tree *t;
+        const Node *m_node;
+    };
+
+
+    // default ctor
+    Tree()
+        : m_size(0), m_comp(std::less<Key>()), m_sentinel(Key(), Value(), &m_sentinel)
+    {
+        // TODO
+        std::cout << "List::ctor\n";
+        m_init();
+    }
+
+    explicit Tree(Comp comp)
+        : m_size(0), m_comp(comp), m_sentinel(Key(), Value(), &m_sentinel)
+    {
+        // TODO
+        std::cout << "List::ctor\n";
+        m_init();
+    }
+
+    // copy ctor
+    Tree(const Tree &other)
+        : m_size(0), m_comp(other.m_comp), m_sentinel(Key(), Value(), &m_sentinel)
+    {
+        m_init();
+        std::cout << "Tree::ctor copy constructor\n";
+        for (auto it = other.begin(); it != other.end(); ++it) {
+            auto [k, v] = *it;
+            insert(k, v);
+        }
+    }
+
+    // move ctor
+    Tree(Tree &&other) noexcept
+        : m_size(std::move(other.m_size)),
+          m_comp(std::move(other.m_comp)),
+          m_sentinel(Key(), Value(), &m_sentinel)
+    {
+        m_init();
+        std::cout << "Tree::ctor move constructor\n";
+//        for (auto it = other.begin(); it != other.end(); ++it) {
+//            Node *p{m_create_node(std::move(*it))};
+//            m_insert(p);
+//        }
+        auto q{std::queue<Node *>()};
+        q.push(other.m_root());
+        while (!q.empty()) {
+            Node *x{q.front()};
+            q.pop();
+
+            std::cout << "x: " << x << ": " << x->m_data.first << ", " << x->m_data.second << '\n';
+            if (x->m_left != &other.m_sentinel) {
+                q.push(x->m_left);
+            } else {
+                x->m_left = &m_sentinel;
+            }
+            if (x->m_right != &other.m_sentinel) {
+                q.push(x->m_right);
+            } else {
+                x->m_right = &m_sentinel;
+            }
+        }
+        m_sentinel.m_parent = other.m_sentinel.m_parent;
+        m_sentinel.m_left = other.m_sentinel.m_left;
+        m_sentinel.m_right = other.m_sentinel.m_right;
+
+        other.m_init();
+    }
+
+    // default dtor
+    ~Tree()
+    {
+        std::cout << "~Tree::dtor\n";
+        clear();
+    }
+
+    // copy assignment operator
+    Tree &operator=(const Tree &other)
+    {
+        auto tmp = other;
+
+        return *this;
+    }
+
+    // move assignment operator
+    // does not run in constant time
+    Tree &operator=(Tree &&other)
+    {
+        clear();
+        m_size = std::move(other.m_size);
+        for (auto it = other.begin(); it != other.end(); ++it) {
+            if (it.m_node->m_parent == &other.m_sentinel) {
+                it.m_node->m_parent = &m_sentinel;
+            }
+            if (it.m_node->m_left == &other.m_sentinel) {
+                it.m_node->m_left = &m_sentinel;
+            }
+            if (it.m_node->m_right == &other.m_sentinel) {
+                it.m_node->m_right = &m_sentinel;
+            }
+        }
+        m_sentinel = std::move(other.m_sentinel);
+
+        other.m_init();
+        return *this;
+    }
+
+    /**
+     * Returns the number of elements stored.
+     *
+     * @return the number of elements stored.
+     */
+    [[nodiscard]]
+    int size() const
+    {
+        return m_size;
+    }
+
+    /**
+     * Returns true iff the container is empty, i.e. empty() == (size() == 0).
+     *
+     * @return true if the tree is empty and false otherwise.
+     */
+    [[nodiscard]]
+    bool empty() const
+    {
+        return m_sentinel.m_parent == &m_sentinel;
+    }
+
+
+    std::pair<iterator, bool> insert(const Key &key, const Value &value)
+    {
+        // TODO
+        value_type elem{key, value};
+        Node *z{m_create_node(elem)};
+        return m_insert(z);
+    }
+
+    std::pair<iterator, bool> insert(Key &&key, Value &&value)
+    {
+        // TODO
+        value_type elem{std::move(key), std::move(value)};
+        Node *z{m_create_node(std::move(elem))};
+        return m_insert(z);
+    }
+
+    iterator find(const Key &key)
+    {
+        // TODO
+        Node *x{m_iterative_tree_search(key)};
+        if (x == &m_sentinel) {
+            return iterator(this, &m_sentinel);
+        }
+        return iterator(this, x);
+    }
+
+    const_iterator find(const Key &key) const
+    {
+        // TODO
+        Node *x{m_iterative_tree_search(key)};
+        if (x == &m_sentinel) {
+            return const_iterator(this, &m_sentinel);
+        }
+        return const_iterator(this, x);
+    }
+
+    void clear()
+    {
+        // TODO
+        m_postorder_erase_tree(m_root());
+        m_init();
+    }
+
+    void erase(const Key &key)
+    {
+        // TODO
+    }
+
+    void erase(const_iterator pos)
+    {
+        // TODO
+    }
+
+    value_type &front()
+    {
+        return *begin();
+    }
+
+    const value_type &front() const
+    {
+        return *begin();
+    }
+
+    value_type &back()
+    {
+        iterator tmp{*this, end()};
+        --tmp;
+        return *tmp;
+    }
+
+    const value_type &back() const
+    {
+        const_iterator tmp{*this, end()};
+        --tmp;
+        return *tmp;
+    }
+
+    iterator begin()
+    {
+        return iterator(this, m_sentinel.m_left);
+    }
+
+
+    const_iterator begin() const
+    {
+        return const_iterator(this, m_sentinel.m_left);
+    }
+
+
+    iterator end()
+    {
+        return iterator(this, &m_sentinel);
+    }
+
+    const_iterator end() const
+    {
+        return const_iterator(this, &m_sentinel);
+    }
+
+    friend void swap(Tree &lhs, Tree &rhs)
+    {
+        using std::swap;
+        swap(lhs.m_size, rhs.m_size);
+        swap(lhs.m_sentinel, rhs.m_sentinel);
+    }
+
+
+//private:
+
+    void m_init()
+    {
+        m_sentinel.m_parent = &m_sentinel; // root
+        m_sentinel.m_left   = &m_sentinel; // begin() == tree minimum
+        m_sentinel.m_right  = &m_sentinel; // --end() == tree maximum
+        m_size = 0;
+    }
+
+    void m_postorder_erase_tree(Node *x)
+    {
+        if (x != &m_sentinel) {
+            m_postorder_erase_tree(x->m_left);
+            m_postorder_erase_tree(x->m_right);
+            delete x;
+        }
+    }
+
+    Node *m_create_node(value_type &elem)
+    {
+        std::cout << "m_create_node(const value_type &elem) called\n";
+        return new Node(elem, &m_sentinel);
+    }
+
+    Node *m_create_node(value_type &&elem)
+    {
+        std::cout << "m_create_node(value_type &&elem) called\n";
+        return new Node(std::move(elem), &m_sentinel);
+    }
+
+    void m_destroy_node(Node *x)
+    {
+        delete x;
+    }
+
+    Node *m_root()
+    {
+        return m_sentinel.m_parent;
+    }
+
+    Tree_node *m_tree_minimum(Tree_node *x)
+    {
+        while(x->m_left != &m_sentinel) {
+            x = x->m_left;
+        }
+        return x;
+    }
+
+    const Tree_node *m_tree_minimum(const Tree_node *x) const
+    {
+        while(x->m_left != &m_sentinel) {
+            x = x->m_left;
+        }
+        return x;
+    }
+
+    Tree_node *m_tree_maximum(Tree_node *x)
+    {
+        while(x->m_right != &m_sentinel) {
+            x = x->m_right;
+        }
+        return x;
+    }
+
+    const Tree_node *m_tree_maximum(const Tree_node *x) const
+    {
+        while(x->m_right != &m_sentinel) {
+            x = x->m_right;
+        }
+        return x;
+    }
+
+    Node *next(Node *x)
+    {
+        if (x->m_right != &m_sentinel) {
+            return m_tree_minimum(x->m_right);
+        }
+        auto y{x->m_parent};
+        while (y != &m_sentinel && x == y->m_right) {
+            x = y;
+            y = y->m_parent;
+        }
+        return y;
+    }
+
+    const Node *next(const Node *x) const
+    {
+        if (x->m_right != &m_sentinel) {
+            return m_tree_minimum(x->m_right);
+        }
+        auto y{x->m_parent};
+        while (y != &m_sentinel && x == y->m_right) {
+            x = y;
+            y = y->m_parent;
+        }
+        return y;
+    }
+
+    Node *prev(Node *x)
+    {
+        if (x->m_left != &m_sentinel) {
+            return m_tree_maximum(x->m_left);
+        }
+        auto y{x->m_parent};
+        while (y != &m_sentinel && x == y->m_left) {
+            x = y;
+            y = y->m_parent;
+        }
+        return y;
+    }
+
+    const Node *prev(const Node *x) const
+    {
+        if (x->m_left != &m_sentinel) {
+            return m_tree_maximum(x->m_left);
+        }
+        auto y{x->m_parent};
+        while (y != &m_sentinel && x == y->m_left) {
+            x = y;
+            y = y->m_parent;
+        }
+        return y;
+    }
+
+    Node *m_iterative_tree_search(const Key key)
+    {
+        auto x{m_root()};
+        while (x != &m_sentinel && !(!m_comp(key, x->key()) && !m_comp(x->key(), key))) {
+            if (m_comp(key, x->key())) {
+                x = x->m_left;
+            } else {
+                x = x->m_right;
+            }
+        }
+        return x;
+    }
+
+    std::pair<iterator, bool> m_insert(Node *z)
+    {
+        Node *&root{m_sentinel.m_parent};
+        Node *&tree_begin{m_sentinel.m_left};
+        Node *&tree_end{m_sentinel.m_right};
+
+        std::cout << "    m_insert: root->key(): " << root->key() << " ?==? " << z->key() << " :z->key()  "
+                  << std::boolalpha << (!m_comp(z->key(), root->key()) && !m_comp(root->key(), z->key())) << '\n';
+
+        if ((root != &m_sentinel)
+            && (!m_comp(z->key(), root->key()) && !m_comp(root->key(), z->key()))) {
+            std::cout << "updated root\n";
+            root->set_value(std::move(z->m_data.second));
+            m_destroy_node(z);
+            return std::make_pair(iterator(this, m_root()), false);
+        }
+        Node *y{&m_sentinel};
+        auto x{m_root()};
+        while (x != &m_sentinel) {
+            y = x;
+            if (m_comp(z->key(), x->key())) {
+                x = x->m_left;
+            } else {
+                x = x->m_right;
+            }
+        }
+        z->m_parent = y;
+        if (y == &m_sentinel) { // tree was empty
+            std::cout << "tree was empty, inserted k, v: (" << z->key() << ", " << z->value() << ")\n";
+            root = z;
+            tree_begin = z;
+            tree_end = z;
+        } else if (m_comp(z->key(), y->key())) {
+            std::cout << "tree non-empty and z->key() < y->key()  "
+                      << "inserted k, v: (" << z->key() << ", " << z->value() << ")\n";
+            y->m_left = z;
+            if (y == tree_begin) { // y is the minimum and new node z is smaller
+                std::cout << z << ": z: " << z->key() << ", " << z->value() << " new minimum\n";
+                tree_begin = z;    // so update tree minimum
+            }
+        } else if (!m_comp(z->key(), y->key()) && !m_comp(y->key(), z->key())) {
+            std::cout << "tree non-empty and z->key() == y->key()\n";
+            y->set_value(std::move(z->m_data.second));
+            m_destroy_node(z);
+            return std::make_pair(iterator(this, y), false);
+        } else {
+            std::cout << "tree non-empty and z->key() > y->key()  "
+                      << "inserted k, v: (" << z->key() << ", " << z->value() << ")\n";
+            y->m_right = z;
+            if (y == tree_end) {   // y is the maximum and new node z is greater
+                std::cout << z << ": z: " << z->key() << ", " << z->value() << " new maximum\n";
+                tree_end = z;      // so update tree maximum
+            }
+        }
+        ++m_size;
+        return std::make_pair(iterator(this, z), true);
+    }
+
+    friend std::ostream &operator<<(std::ostream &s, const Tree<Key, Value, Comp> &t)
+    {
+        using TNode = Tree<Key, Value, Comp>::Tree_node;
+
+        auto q{std::queue<TNode *>()};
+        q.push(t.m_sentinel.m_parent);
+        s << "&m_sentinel: " << &t.m_sentinel
+          << " P: "          << t.m_sentinel.m_parent
+          << " L: "          << t.m_sentinel.m_left
+          << " R: "          << t.m_sentinel.m_right << '\n';
+        while(!q.empty()) {
+            TNode *node = q.front();
+            q.pop();
+
+            if (node != &t.m_sentinel) {
+                s << node << ": " << node->key() << ", " << node->value() << ": P: " << node->m_parent << " ";
+                if (node->m_left != &t.m_sentinel) {
+                    s << "L: " << node->m_left << ": " << node->m_left->key() << ", " << node->m_left->value() << " ";
+                } else {
+                    s << "L: " << node->m_left << ": null ";
+                }
+                if (node->m_right != &t.m_sentinel) {
+                    s << "R: " << node->m_right << ": " << node->m_right->key() << ", " << node->m_right->value() << " ";
+                } else {
+                    s << "R: " << node->m_right << ": null ";
+                }
+                s << std::endl;
+                q.push(node->m_left);
+                q.push(node->m_right);
+            }
+        }
+        return s;
+    }
+
+    int m_size;
+
+    Comp m_comp;
+
+    Node m_sentinel;
+
+
+//    static Node *tree_minimum(Node *node);
+//
+//    /**
+//     * Finds the largest key-value pair in the tree by following the rightmost path.
+//     * It is the responsibility of the caller to to verify that the tree is non-empty.
+//     *
+//     * Based on Tree-Maximum from CLRS ch. 12, p. 291.
+//     *
+//     * This is an O(h) operation, but since the tree is unbalanced, h = n in the
+//     * worst case and this becomes an O(n) operation.
+//     *
+//     * @return A pointer to the node with the largest key.
+//     */
+//    static Node *tree_maximum(Node *node);
+//
+//    /**
+//     * Swap function for applying the copy-and-swap idiom.
+//     *
+//     * References:
+//     * https://github.com/isocpp/CppCoreGuidelines/blob/master/CppCoreGuidelines.md#c83-for-value-like-types-consider-providing-a-noexcept-swap-function
+//     * https://stackoverflow.com/a/3279550
+//     *
+//     * @param lhs Left-hand side operand to be swapped.
+//     * @param rhs Right-hand side operand to be swapped.
+//     */
+//    friend void swap(Tree &lhs, Tree &rhs) noexcept;
+//
+//    /**
+//     * Enables printing of the tree. Uses a queue (Queue.hpp) to print the tree in
+//     * a BFS manner. This has mainly been used as a convenience function for debugging.
+//     *
+//     * Complexity is O(n) since we of course need to print all nodes in the tree.
+//     */
+//    friend std::ostream &operator<<(std::ostream &s, const Tree &t);
+//
+//    class Node
+//    {
+//    public:
+//        /**
+//         * Default constructor.
+//         *
+//         * @param key The immutable key to store in this node.
+//         * @param value The value to store with the key in this node.
+//         */
+//        Node(int key, std::string value);
+//
+//        /**
+//         * Default destructor.
+//         */
+//        ~Node();
+//
+//        /**
+//         * Returns the node with the smallest key larger than the key in
+//         * this node if it exists and nullptr otherwise.
+//         *
+//         * Based on Tree-Successor from CLRS ch. 12, p. 291.
+//         *
+//         * This is an O(h) operation, but since the tree is unbalanced, h = n in the
+//         * worst case and this becomes an O(n) operation.
+//         *
+//         * @return A pointer to the successor of this node if exists and
+//         *         nullptr otherwise.
+//         */
+//        Node *next();
+//
+//        /**
+//         * Returns the node with the smallest key larger than the key in
+//         * this node if it exists and nullptr otherwise.
+//         *
+//         * Based on Tree-Successor from CLRS ch. 12, p. 291.
+//         *
+//         * This is an O(h) operation, but since the tree is unbalanced, h = n in the
+//         * worst case and this becomes an O(n) operation.
+//         *
+//         * @return A const pointer to the successor of this node if exists and
+//         *         nullptr otherwise.
+//         */
+//        const Node *next() const;
+//
+//        /**
+//         * Returns the node with the largest key smaller than the key in
+//         * this node if it exists and nullptr otherwise.
+//         *
+//         * Based on Tree-Predecessor from CLRS ch. 12, p. 291.
+//         *
+//         * This is an O(h) operation, but since the tree is unbalanced, h = n in the
+//         * worst case and this becomes an O(n) operation.
+//         *
+//         * @return A pointer to the predecessor of this node if exists and
+//         *         nullptr otherwise.
+//         */
+//        Node *prev();
+//
+//        /**
+//         * Returns the node with the largest key smaller than the key in
+//         * this node if it exists and nullptr otherwise.
+//         *
+//         * Based on Tree-Predecessor from CLRS ch. 12, p. 291.
+//         *
+//         * This is an O(h) operation, but since the tree is unbalanced, h = n in the
+//         * worst case and this becomes an O(n) operation.
+//         *
+//         * @return A const pointer to the predecessor of this node if exists and
+//         *         nullptr otherwise.
+//         */
+//        const Node *prev() const;
+//
+//        const int key;
+//        std::string value;
+//
+//        /**
+//         * Pointer to the parent Node of this node in the tree, or nullptr if
+//         * this node is the root.
+//         */
+//        Node *parent;
+//
+//        /**
+//         * Pointer to left child Node of this node in the tree, or nullptr if no
+//         * such child exists.
+//         */
+//        Node *left;
+//
+//        /**
+//         * Pointer to right child Node of this node in the tree, or nullptr if no
+//         * such child exists.
+//         */
+//        Node *right;
+//    };
+//
+//private:
+//    /**
+//     * The number of key-value pairs (nodes) in the tree.
+//     */
+//    int n;
+//
+//    Node *root;
+//
+//    /**
+//     * Searches the tree iteratively for the given key.
+//     *
+//     * Based on Iterative-Tree-Search from CLRS ch. 12, p. 291.
+//     *
+//     * This is an O(h) operation, but since the tree is unbalanced, h = n in the
+//     * worst case and this becomes an O(n) operation.
+//     *
+//     * @param key The key to search for.
+//     * @return Pointer to the node with the given search key if it exists and
+//     *         nullptr otherwise.
+//     */
+//    Node *iterative_tree_search(int key) const;
+//
+//    /**
+//     * Replaces on subtree as a child of its parent with another subtree.
+//     *
+//     * Based on Transplant from CLRS ch. 12, p. 296.
+//     *
+//     * @param u Subtree to be replaced by v.
+//     * @param v Subtree to replace u.
+//     */
+//    void transplant(Node *u, Node *v);
+//
+//    /**
+//     * Recursive function performing a post-order traversal of the tree, deleting
+//     * each visited node in the process.
+//     *
+//     * This is of course an O(n) operation, since we must visit each node in the tree.
+//     *
+//     * @param x Root of the subtree to be deleted.
+//     */
+//    void postorder_erase_tree(Node *x);
+    };
+//
+///**
+// * Checks for equality between the key-value pairs stored in each tree.
+// *
+// * First compares sizes as a sanity check and returns false if the two trees are not
+// * the same size. If sizes are equal, then performs an in-order traversal, where for
+// * each node, first the keys are compared and if the match, the values are compared.
+// * If all key-value pairs are equal, the function returns true. Note however, that
+// * true only means equality of contents and not of structure. In other words, these
+// * two trees are considered equal:
+// *
+// *             --------------      --------------
+// *            | k: 2, v: "2" |    | k: 1, v: "1" |
+// *             --------------      --------------
+// *               /             ==            \
+// *        --------------                --------------
+// *       | k: 1, v: "1" |              | k: 2, v: "2" |
+// *        --------------                --------------
+// *
+// * Since values are strings, let m be the length of the longest string stored in any
+// * node. Then the worst case complexity is O(n * m), since to verify that two trees
+// * are equal, we need to compare all n nodes, which may each contain a string of up to
+// * length m.
+// *
+// * @param lhs Left-hand side operand of inequality operator.
+// * @param rhs right-hand side operand of inequality operator.
+// * @return true if lhs is equal to rhs and false otherwise.
+// */
+//bool operator==(const Tree &lhs, const Tree &rhs);
+//
+///**
+// * Checks for inequality between the key-value pairs stored in each tree.
+// *
+// * Uses the negation of operator== to check for inequality. Please refer to operator==
+// * for further details.
+// *
+// * This is an O(n * m) operation in the worst case as operator== is an O(n * m)
+// * operation in the worst case, where m is the length of the longest string stored
+// * in any node.
+// *
+// * @param lhs Left-hand side operand of inequality operator.
+// * @param rhs right-hand side operand of inequality operator.
+// * @return true if lhs is not equal to rhs and false otherwise.
+// */
+//bool operator!=(const Tree &lhs, const Tree &rhs);
+
+} // namespace DM852
+
+#endif //TREE_HPP
